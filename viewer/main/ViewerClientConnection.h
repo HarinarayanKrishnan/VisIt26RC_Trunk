@@ -103,8 +103,9 @@ public:
 
     const QString &Name() const;
 
-    void SetAdvancedRendering(bool ar) { advancedRendering = ar; }
-    bool GetAdvancedRendering() { return advancedRendering; }
+    enum AdvancedRendering { AR_None, AR_Image, AR_Data};
+    void SetAdvancedRendering(AdvancedRendering ar) { advancedRendering = ar; }
+    AdvancedRendering GetAdvancedRendering() { return advancedRendering; }
     void SetExternalClient(bool ex) { externalClient = ex; }
     bool GetExternalClient() { return externalClient; }
     static const int FreelyExchangedState;
@@ -124,7 +125,7 @@ private:
     bool               emitSignalsOnUpdate;
     bool               ownsNotifier;
     bool               allState; //whether to send all the state during initial connection
-    bool               advancedRendering; //this client request has rendering capabilities
+    AdvancedRendering  advancedRendering; //this client request has rendering capabilities
     bool               externalClient; // this client is non standard
     int                initialStateStage;
 

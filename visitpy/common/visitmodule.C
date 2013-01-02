@@ -1129,7 +1129,7 @@ visit_AddArgument(PyObject *self, PyObject *args)
         if(!PyArg_ParseTuple(args, "s", &arg))
             return NULL;
 
-        if(strcmp(arg,"-pyuiembedded") == 0 || strcmp(arg,"-uifile") == 0 )
+        if(strcmp(arg,"-pyuiembedded") == 0)
             viewerEmbedded = true;
 
         //GetViewerProxy()->AddArgument(arg);
@@ -17298,7 +17298,8 @@ DelayedLoadPlugins()
     // Start reading from the viewer. This will quit when we get a signal
     // from the viewer insicating that we need to load plugins. This means
     // that the NeedToLoadPlugins() function will be called from
-    visit_eventloop(0);
+    // Note: no need to do this if viewer is embedded..
+    if(!viewerEmbedded) visit_eventloop(0);
 
     // Delete the plugin loader observer so the NeedToLoadPlugins() function
     // is never called again.
@@ -17500,7 +17501,7 @@ InitializeViewerProxy(ViewerProxy* proxy)
     //
     for(int i = 1; i < cli_argc; ++i)
     {
-        if(strcmp(cli_argv[i],"-pyuiembedded") == 0 || strcmp(cli_argv[i],"-uifile") == 0)
+        if(strcmp(cli_argv[i],"-pyuiembedded") == 0)
             viewerEmbedded = true; //do not show window if it is embedded..
         GetViewerProxy()->AddArgument(cli_argv[i]);
     }
@@ -17759,6 +17760,9 @@ static void
 CreateListenerThread()
 {
     keepGoing = true;
+
+    // No need to create threads for an embedded viewer
+    if(viewerEmbedded) return;
 
 #ifdef THREADS
     //
@@ -18361,7 +18365,8 @@ Synchronize()
     messageObserver->ClearError();
 
     // Return if the thread initialization failed.
-    if(!moduleUseThreads)
+    // or if viewer is embedded
+    if(!moduleUseThreads || viewerEmbedded)
         return 0;
 
     //

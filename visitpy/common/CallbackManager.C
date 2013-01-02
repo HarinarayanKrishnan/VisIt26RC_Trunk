@@ -500,17 +500,25 @@ CallbackManager::Work()
 // ****************************************************************************
 
 void 
-CallbackManager::RegisterHandler(Subject *subj, const std::string &cbName, 
+CallbackManager::RegisterHandler(Subject *subj, const std::string &cbName,
     ObserverCallback *handler, void *handler_data,
     AddWorkCallback  *addwork, void *addwork_data)
 {
+
     threading->MUTEX_LOCK();
 
+    /// if name already exists then skip
+    /// HKTODO: handle multiple connections..
+    if(nameToSubject.count(cbName) > 0)
+    {
+        threading->MUTEX_UNLOCK();
+        return;
+    }
     // Attach the subject. It will only happen once, even if we call this
     // routine multiple times.
     subj->Attach(this);
 
-    CallbackData entry;   
+    CallbackData entry;
     entry.name = cbName;
     entry.handler = handler;
     entry.handler_data = handler_data;

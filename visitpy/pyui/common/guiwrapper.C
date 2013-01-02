@@ -243,11 +243,13 @@ GUIWrapper::GUIWrapper(int& argc,char** argv)
         /// this turns off all warnings..
         vtkObject::GlobalWarningDisplayOff();
 
-        guiproxy = new ViewerSubjectProxy();
-        guiproxy->Initialize(argc,argv);
+        guiproxy = new ViewerSubjectProxy(argc,argv);
         gui = new QvisGUIApplicationDerived(argc, argv,guiproxy);
-
         cliproxy = new ViewerSubjectProxy(guiproxy);
+//        cliproxy = new ViewerSubjectProxy(argc,argv);
+//        guiproxy = new ViewerSubjectProxy(cliproxy);
+//        gui = new QvisGUIApplicationDerived(argc, argv,guiproxy);
+
     }
     catch(VisItException e)
     {

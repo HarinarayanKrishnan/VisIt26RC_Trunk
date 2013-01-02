@@ -432,6 +432,13 @@ ViewerSubject::AddNewViewerClientConnection(ViewerClientConnection* newClient)
             this,      SLOT(DisconnectClient(ViewerClientConnection *)));
 
     clients.push_back(newClient);
+
+    if(newClient->GetAdvancedRendering() == ViewerClientConnection::AR_Image)
+        BroadcastAdvanced(GetViewerState()->GetView3DAttributes());
+
+    if(newClient->GetAdvancedRendering() == ViewerClientConnection::AR_Data)
+        BroadcastAdvanced(0);
+
     // Discover the client's information.
     QTimer::singleShot(100, this, SLOT(DiscoverClientInformation()));
 }
@@ -8166,9 +8173,11 @@ ViewerSubject::HandleViewerRPCEx()
     //
     GetViewerState()->GetLogRPC()->SetRPCType(ViewerRPC::SetStateLoggingRPC);
     GetViewerState()->GetLogRPC()->SetBoolFlag(false);
-    BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
+    GetViewerState()->GetLogRPC()->Notify();
+    //BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
     GetViewerState()->GetLogRPC()->CopyAttributes(GetViewerState()->GetViewerRPC());
-    BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
+    GetViewerState()->GetLogRPC()->Notify();
+    //BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
 
     debug4 << "Handling "
            << ViewerRPC::ViewerRPCType_ToString(GetViewerState()->GetViewerRPC()->GetRPCType()).c_str()
@@ -8565,14 +8574,16 @@ ViewerSubject::HandleViewerRPCEx()
     // We need to do this until all items in the switch statement are
     // removed and converted to actions.
     //
-
+    if(GetViewerState()->GetViewerRPC()->GetRPCType() == ViewerRPC::DrawPlotsRPC)
+        BroadcastAdvanced(0);
     if (everythingOK && !actionHandled)
         ViewerWindowManager::Instance()->UpdateActions();
 
     // Tell the clients that it's okay to start logging again.
     GetViewerState()->GetLogRPC()->SetRPCType(ViewerRPC::SetStateLoggingRPC);
     GetViewerState()->GetLogRPC()->SetBoolFlag(true);
-    BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
+    GetViewerState()->GetLogRPC()->Notify();
+    //BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
 
     debug4 << "Done handling "
            << ViewerRPC::ViewerRPCType_ToString(GetViewerState()->GetViewerRPC()->GetRPCType()).c_str()
@@ -8585,30 +8596,55 @@ ViewerSubject::BroadcastAdvanced(AttributeSubject* subj)
 
     /// check if any clients have enabled advanced broadcasting before even
     /// starting..
-    bool shouldBroadCastAdvanced = false;
+    bool shouldBroadCastAdvancedImage = false;
+    bool shouldBroadCastAdvancedData = false;
 
     for(int i = 0; i < clients.size(); ++i)
     {
-        if(clients[i]->GetAdvancedRendering())
+        if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_Image)
+            shouldBroadCastAdvancedImage = true;
+        if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_Data)
+            shouldBroadCastAdvancedData = true;
+    }
+
+    if(!shouldBroadCastAdvancedImage && !shouldBroadCastAdvancedData) return;
+
+    /// if DrawPlots then send a Query for Advanced users..
+    stringVector defaultVarsImages;
+    stringVector defaultVarsData;
+    intVector defaultVarsDataMap;
+
+    if(     shouldBroadCastAdvancedImage &&
+            (subj == GetViewerState()->GetView2DAttributes() ||
+            subj == GetViewerState()->GetView3DAttributes()))
+    {
+        ViewerWindowManager* manager = ViewerWindowManager::Instance();
+
+        /// for now do screen capture, until all clients are stable
+        for(int i = 0; i < manager->GetNumWindows(); ++i)
         {
-            shouldBroadCastAdvanced = true;
-            break;
+            ViewerWindow* vwin = manager->GetWindow(i);
+
+            size_t len = 0;
+            const char* result = 0;
+            /// image
+            avtImage_p image = vwin->ScreenCapture();
+            /// convert to format..
+            result = avtImageFileWriter::WriteToByteArray(image->GetImage(),80,1,len);
+
+            if(len > 0){
+                QByteArray data(result,len);
+                defaultVarsImages.push_back(QString(data.toBase64()).toStdString());
+            }
+            delete [] result;
         }
     }
 
-    if(!shouldBroadCastAdvanced) return; 
-
-    /// if DrawPlots then send a Query for Advanced users..
-    //if(GetViewerState()->GetViewerRPC()->GetRPCType() == ViewerRPC::DrawPlotsRPC)
-    if(subj == GetViewerState()->GetView2DAttributes() || subj == GetViewerState()->GetView3DAttributes())
+    if( shouldBroadCastAdvancedData && subj == NULL )
     {
-        QueryAttributes* qatts = GetViewerState()->GetQueryAttributes();
         ViewerWindowManager* manager = ViewerWindowManager::Instance();
-        stringVector defaultVars;
 
         /// for now do screen capture, until all clients are stable
-        bool screenCapture = true;
-
         for(int i = 0; i < manager->GetNumWindows(); ++i)
         {
             ViewerWindow* vwin = manager->GetWindow(i);
@@ -8616,68 +8652,75 @@ ViewerSubject::BroadcastAdvanced(AttributeSubject* subj)
             size_t len = 0;
             const char* result = 0;
 
-            if(!screenCapture)
-            {
-                /// get dataset..
-                ViewerPlotList *plotList = vwin->GetPlotList();
+            /// get dataset..
+            ViewerPlotList *plotList = vwin->GetPlotList();
 
-                for(int j = 0; j < plotList->GetNumPlots(); ++j)
+            if(plotList->GetNumRealizedPlots() == 0 || plotList->GetNumVisiblePlots() == 0)
+                continue;
+
+            for(int j = 0; j < plotList->GetNumPlots(); ++j)
+            {
+                ViewerPlot* plot = plotList->GetPlot(i);
+
+                avtDataObjectReader_p reader = plot->GetReader();
+                if(reader->InputIsImage())
                 {
-                    ViewerPlot* plot = plotList->GetPlot(i);
-                    avtDataObjectReader_p reader = plot->GetReader();
-                    if(reader->InputIsImage())
-                    {
-                        avtImage_p image = reader->GetImageOutput();
-                        result = avtImageFileWriter::WriteToByteArray(image->GetImage(),80,1,len);
+                    avtImage_p image = reader->GetImageOutput();
+                    result = avtImageFileWriter::WriteToByteArray(image->GetImage(),80,1,len);
 
-                        if(len > 0){
-                            QByteArray data(result,len);
-                            defaultVars.push_back(QString(data.toBase64()).toStdString());
-                        }
-                        /// free the memory
-                        delete [] result;
+                    if(len > 0){
+                        QByteArray data(result,len);
+                        defaultVarsData.push_back(QString(data.toBase64()).toStdString());
+                        defaultVarsDataMap.push_back((int)ViewerClientConnection::AR_Image);
                     }
-                    else if(reader->InputIsDataset())
+                    /// free the memory
+                    delete [] result;
+                }
+                else if(reader->InputIsDataset())
+                {
+                    avtDataset_p dataset = reader->GetDatasetOutput();
+                    std::string res = dataset->GetDatasetAsString();
+                    if(res.size() > 0)
                     {
-                        avtDataset_p dataset = reader->GetDatasetOutput();
-                        std::string res = dataset->GetDatasetAsString();
-                        if(res.size() > 0)
-                            defaultVars.push_back(res);
+                        QByteArray data(res.c_str(),res.size());
+                        defaultVarsData.push_back(QString(data.toBase64()).toStdString());
+                        defaultVarsDataMap.push_back((int)ViewerClientConnection::AR_Data);
                     }
                 }
             }
-            else
-            {
-                /// image
-                avtImage_p image = vwin->ScreenCapture();
-                /// convert to format..
-                result = avtImageFileWriter::WriteToByteArray(image->GetImage(),80,1,len);
-
-                if(len > 0){
-                    QByteArray data(result,len);
-                    defaultVars.push_back(QString(data.toBase64()).toStdString());
-                }
-                delete [] result;
-            }
-
         }
+    }
 
-        if(defaultVars.size() > 0)
+    QueryAttributes* qatts = GetViewerState()->GetQueryAttributes();
+
+    for(int i = 0; i < clients.size(); ++i)
+    {
+        if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_None)
+            continue;
+
+        if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_Data &&
+                defaultVarsData.size() > 0)
+        {
+            qatts->SetResultsMessage("AVTData");
+            qatts->SetResultsValue(0);
+            qatts->SetDefaultVars(defaultVarsData);
+            qatts->SetVarTypes(defaultVarsDataMap);
+            clients[i]->BroadcastToClient(qatts);
+        }
+        else if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_Image &&
+                defaultVarsImages.size() > 0)
         {
             qatts->SetResultsMessage("ImageData");
             qatts->SetResultsValue(0);
-            qatts->SetDefaultVars(defaultVars);
-
-            for(int i = 0; i < clients.size(); ++i)
-            {
-                if(clients[i]->GetAdvancedRendering())
-                    clients[i]->BroadcastToClient(qatts);
-            }
-            qatts->SetResultsMessage("");
-            qatts->SetResultsValue(0);
-            qatts->SetDefaultVars(stringVector());
+            qatts->SetDefaultVars(defaultVarsImages);
+            clients[i]->BroadcastToClient(qatts);
         }
     }
+
+    /// reset the message..
+    qatts->SetResultsMessage("");
+    qatts->SetResultsValue(0);
+    qatts->SetDefaultVars(stringVector());
 }
 // ****************************************************************************
 // Method: ViewerSubject::PostponeAction
@@ -8794,18 +8837,21 @@ ViewerSubject::HandlePostponedAction()
             //
             GetViewerState()->GetLogRPC()->SetRPCType(ViewerRPC::SetStateLoggingRPC);
             GetViewerState()->GetLogRPC()->SetBoolFlag(false);
-            BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
+            GetViewerState()->GetLogRPC()->Notify();
+            //BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
             // Tell the logging client to log a change to set the window to the
             // window that originated the RPC.
             if(win != wM->GetActiveWindow())
             {
                 GetViewerState()->GetLogRPC()->SetRPCType(ViewerRPC::SetActiveWindowRPC);
                 GetViewerState()->GetLogRPC()->SetWindowId(win->GetWindowId()+1);
-                BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
+                GetViewerState()->GetLogRPC()->Notify();
+                //BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
             }
             GetViewerState()->GetLogRPC()->CopyAttributes(&GetViewerState()->
                 GetPostponedAction()->GetRPC());
-            BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
+            GetViewerState()->GetLogRPC()->Notify();
+            //BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
 
             // Handle the action.
             actionMgr->HandleAction(GetViewerState()->GetPostponedAction()->GetRPC());
@@ -8816,12 +8862,14 @@ ViewerSubject::HandlePostponedAction()
             {
                 GetViewerState()->GetLogRPC()->SetRPCType(ViewerRPC::SetActiveWindowRPC);
                 GetViewerState()->GetLogRPC()->SetWindowId(wM->GetActiveWindow()->GetWindowId()+1);
-                BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
+                GetViewerState()->GetLogRPC()->Notify();
+                //BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
             }
             // Tell the clients that it's okay to start logging again.
             GetViewerState()->GetLogRPC()->SetRPCType(ViewerRPC::SetStateLoggingRPC);
             GetViewerState()->GetLogRPC()->SetBoolFlag(true);
-            BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
+            GetViewerState()->GetLogRPC()->Notify();
+            //BroadcastToAllClients((void*)this, GetViewerState()->GetLogRPC());
         }
         else
         {

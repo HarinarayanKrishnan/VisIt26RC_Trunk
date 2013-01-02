@@ -97,7 +97,7 @@ ViewerClientConnection::ViewerClientConnection(const ViewerState *s,
     }
     xfer->CreateNewSpecialOpcode(); // animationStopOpcode
     xfer->CreateNewSpecialOpcode(); // iconifyOpcode
-    advancedRendering = false;
+    advancedRendering = AR_None;
     externalClient = false;
 }
 
@@ -159,7 +159,7 @@ ViewerClientConnection::ViewerClientConnection(ParentProcess *p,
     }
     xfer->CreateNewSpecialOpcode(); // animationStopOpcode
     xfer->CreateNewSpecialOpcode(); // iconifyOpcode
-    advancedRendering = false;
+    advancedRendering = AR_None;
     externalClient = false;
 }
 

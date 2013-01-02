@@ -682,15 +682,16 @@ QWsSocket::initializeWebSocket(const QString &request, QString &response)
 
 //    std::cout << "hostaddr: " << hostAddress.toStdString() << " "
 //              << "resource: " << resourceName.toStdString() << " "
-//              << "key: " << key.toStdString() << " -- " << key1.toStdString() << std::endl;
+//              << "key: " << key.toStdString() << " -- 1: "
+//              << key1.toStdString() << "2: "
+//              << key2.toStdString() << "3: "
+//              << key3.toStdString() << std::endl;
+
     // If the mandatory params are not set, we abort the connection to the Websocket server
-    if ( hostAddress.isEmpty()
-        || resourceName.isEmpty()
-        || ( key.isEmpty() && ( key1.isEmpty() || key2.isEmpty() || key3.isEmpty() ) )
-       )
-    {
+    if ( hostAddress.isEmpty() || resourceName.isEmpty()) return false;
+    if( key.isEmpty() && ( key1.isEmpty() || key2.isEmpty() || key3.isEmpty() ) )
         return false;
-    }
+
     ////////////////////////////////////////////////////////////////////
 
     // Compose handshake answer
@@ -779,10 +780,6 @@ WebSocketConnection::closeConnection()
     QObject::disconnect(socket,SIGNAL(aboutToClose()),this, SLOT(closeConnection()));
     socket->close();
     socket->internalSocket()->close();
-
-    //tell VisIt to terminate connection with client..
-//     {"contents":{"data":{"RPCType":91,"activeOperatorIds":null,"activePlotIds":null,"boolFlag":false,"colorTableName":"","database":"","expandedPlotIds":null,"frame":0,"frameRange":[0,0],"intArg1":0,"intArg2":0,"intArg3":0,"nFrames":0,"operatorType":0,"plotType":0,"programHost":"","programOptions":null,"programSim":"","queryName":"","queryParams":null,"queryPoint1":[0,0,0],"stateNumber":0,"stringArg1":"","stringArg2":"","toolId":0,"toolUpdateMode":1,"variable":"","windowArea":"","windowId":0,"windowLayout":1,"windowMode":0},"metadata":{"RPCType":"int","activeOperatorIds":"intVector","activePlotIds":"intVector","boolFlag":"bool","colorTableName":"string","database":"string","expandedPlotIds":"intVector","frame":"int","frameRange":"intVector","intArg1":"int","intArg2":"int","intArg3":"int","nFrames":"int","operatorType":"int","plotType":"int","programHost":"string","programOptions":"stringVector","programSim":"string","queryName":"string","queryParams":"empty","queryPoint1":"doubleVector","stateNumber":"int","stringArg1":"string","stringArg2":"string","toolId":"int","toolUpdateMode":"int","variable":"string","windowArea":"string","windowId":"int","windowLayout":"int","windowMode":"int"}},"id":0,"typeinfo":{"data":{"RPCType":0,"activeOperatorIds":17,"activePlotIds":16,"boolFlag":23,"colorTableName":19,"database":5,"expandedPlotIds":18,"frame":12,"frameRange":11,"intArg1":24,"intArg2":25,"intArg3":26,"nFrames":9,"operatorType":14,"plotType":13,"programHost":6,"programOptions":8,"programSim":7,"queryName":20,"queryParams":30,"queryPoint1":21,"stateNumber":10,"stringArg1":27,"stringArg2":28,"toolId":22,"toolUpdateMode":29,"variable":15,"windowArea":4,"windowId":2,"windowLayout":1,"windowMode":3},"metadata":{"RPCType":"int","activeOperatorIds":"int","activePlotIds":"int","boolFlag":"int","colorTableName":"int","database":"int","expandedPlotIds":"int","frame":"int","frameRange":"int","intArg1":"int","intArg2":"int","intArg3":"int","nFrames":"int","operatorType":"int","plotType":"int","programHost":"int","programOptions":"int","programSim":"int","queryName":"int","queryParams":"int","queryPoint1":"int","stateNumber":"int","stringArg1":"int","stringArg2":"int","toolId":"int","toolUpdateMode":"int","variable":"int","windowArea":"int","windowId":"int","windowLayout":"int","windowMode":"int"}},"typename":"ViewerRPC"}
-
 }
 
 void
@@ -898,7 +895,8 @@ WebSocketConnection::WriteHeader(const unsigned char *buf, long len)
     socket->flush();
 
     /// wait for bytes written
-    socket->internalSocket()->waitForBytesWritten();
+    if(socket->state() != QAbstractSocket::UnconnectedState)
+        socket->internalSocket()->waitForBytesWritten();
 
     return len;
 }
@@ -1006,7 +1004,9 @@ WebSocketConnection::Flush(AttributeSubject *subject)
         QString output = node.ToString().c_str();
 
         socket->write(output);
-        socket->internalSocket()->waitForBytesWritten();
+
+        if(socket->internalSocket()->state() != QAbstractSocket::UnconnectedState)
+            socket->internalSocket()->waitForBytesWritten();
     }
 
     MapNode child;
@@ -1021,7 +1021,9 @@ WebSocketConnection::Flush(AttributeSubject *subject)
     QString output = node.ToString().c_str();
 
     socket->write(output);
-    socket->internalSocket()->waitForBytesWritten();
+
+    if(socket->internalSocket()->state() != QAbstractSocket::UnconnectedState)
+        socket->internalSocket()->waitForBytesWritten();
     buffer.clear();
 }
 
