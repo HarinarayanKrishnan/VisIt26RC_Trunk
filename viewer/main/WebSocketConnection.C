@@ -110,6 +110,7 @@ QWsSocket::QWsSocket( QTcpSocket * socket, QObject * parent, quint8 protVers ) :
     setSocketState( socket->state() );
 
     connect( tcpSocket, SIGNAL(readyRead()), this, SLOT(dataReceived()) );
+    //connect( tcpSocket, SIGNAL(readyRead()), this, SLOT(dataReceivedAll()) );
     connect( tcpSocket, SIGNAL(disconnected()), this, SLOT(tcpSocketDisconnected()) );
     connect( tcpSocket, SIGNAL(aboutToClose()), this, SLOT(tcpSocketAboutToClose()) );
 }
@@ -213,6 +214,105 @@ void QWsSocket::dataReceived()
     if ( tcpSocket->bytesAvailable() )
         dataReceived();
 }
+
+void QWsSocket::dataReceivedAll()
+{
+
+    QByteArray data = tcpSocket->readAll();
+
+    QByteArray BA; // ReadBuffer
+    quint8 byte; // currentByteBuffer
+
+    size_t offset = 0;
+
+    while(offset < data.size())
+    {
+        // FIN, RSV1-3, Opcode
+        BA = data.mid(offset,1); offset += 1;
+        byte = BA[0];
+        quint8 FIN = (byte >> 7);
+//        quint8 RSV1 = ((byte & 0x7F) >> 6);
+//        quint8 RSV2 = ((byte & 0x3F) >> 5);
+//        quint8 RSV3 = ((byte & 0x1F) >> 4);
+        EOpcode Opcode = (EOpcode)(byte & 0x0F);
+
+        // Mask, PayloadLength
+        BA = data.mid(offset,1); offset += 1;
+        byte = BA[0];
+        quint8 Mask = (byte >> 7);
+        quint64 PayloadLength = (byte & 0x7F);
+        // Extended PayloadLength
+        if ( PayloadLength == 126 )
+        {
+            BA = data.mid(offset,2); offset += 2; //tcpSocket->read(2);
+            PayloadLength = ((quint8)BA[0] << 8) + (quint8)BA[1];
+        }
+        else if ( PayloadLength == 127 )
+        {
+            BA = data.mid(offset,8); offset += 8; //tcpSocket->read(8);
+            PayloadLength = 0;
+            quint64 plbyte;
+            for ( int i=0 ; i<8 ; i++ )
+            {
+                plbyte = (quint8)BA[i];
+                PayloadLength += ( plbyte << (7-i)*8 );
+            }
+        }
+
+        // MaskingKey
+        QByteArray MaskingKey;
+        if ( Mask )
+        {
+            MaskingKey = data.mid(offset,4); offset += 4; //tcpSocket->read(4);
+        }
+
+        // Extension // UNSUPPORTED FOR NOW
+
+        // ApplicationData
+        if ( PayloadLength )
+        {
+            QByteArray ApplicationData = data.mid(offset, PayloadLength); offset += PayloadLength; //tcpSocket->read( PayloadLength );
+            if ( Mask )
+                ApplicationData = QWsSocket::mask( ApplicationData, MaskingKey );
+            currentFrame.append( ApplicationData );
+        }
+
+        if ( FIN )
+        {
+            if ( Opcode == OpBinary )
+            {
+                emit frameReceived( currentFrame );
+            }
+            else if ( Opcode == OpText )
+            {
+                QString byteString;
+                byteString.reserve(currentFrame.size());
+                for (int i=0 ; i<currentFrame.size() ; i++)
+                    byteString[i] = currentFrame[i];
+                emit frameReceived( byteString );
+            }
+            else if ( Opcode == OpPing )
+            {
+                QByteArray pongRequest = QWsSocket::composeHeader( true, OpPong, 0 );
+                write( pongRequest );
+            }
+            else if ( Opcode == OpPong )
+            {
+                quint64 ms = pingTimer.elapsed();
+                emit pong(ms);
+            }
+            else if ( Opcode == OpClose )
+            {
+                tcpSocket->close();
+            }
+            currentFrame.clear();
+        }
+    }
+
+//    if(tcpSocket->bytesAvailable())
+//        dataReceivedAll();
+}
+
 
 void QWsSocket::dataReceivedV0()
 {
@@ -788,13 +888,20 @@ WebSocketConnection::ReadFrame(QByteArray &array)
     std::cout << "binary" << std::endl;
 }
 
-QString messageRead = "";
-
 void
 WebSocketConnection::ReadFrame(const QString &str)
 {
-    //std::cout << str.toStdString() << std::endl;
+    //test if object..
+    if(!str.startsWith("{") || !str.endsWith("}"))
+    {
+        std::cout << "Incomplete Object..:" << str.toStdString() << std::endl;
+        while(socket->internalSocket()->bytesAvailable())
+            socket->internalSocket()->readAll();
+        return;
+    }
+
     messageRead = str;
+    messages.push_back(str);
 }
 
 // ****************************************************************************
@@ -923,10 +1030,21 @@ WebSocketConnection::Fill()
     //if not connected then sending a message would be useless
     if(socket->state() != QAbstractSocket::ConnectedState) return 0;
 
-    if(messageRead.size() == 0)
+    if(messages.size() == 0)
         socket->internalSocket()->waitForReadyRead();
-    if(messageRead.size() > 0)
-    {
+
+    //std::cout << "message: " << messageRead.toStdString() << std::endl;
+
+    int res = 0;
+    buffer.clear();
+
+    for(size_t i = 0; i < messages.size(); ++i)
+    {  
+        QString messageRead = messages[i];
+        //std::cout << messageRead.toStdString() << std::endl;
+        if(messageRead.size() == 0 || !messageRead.startsWith("{") || !messageRead.endsWith("}"))
+            continue;
+
         //std::cout << messageRead.toStdString() << std::endl;
         std::string message = messageRead.toStdString();
         messageRead = "";
@@ -945,15 +1063,14 @@ WebSocketConnection::Fill()
         MapNode mapnode(contents,false);
 
 
-//        std::cout << mapnode.ToXML(false) << std::endl;
-//        std::cout << mapnode.ToJSON(false) << std::endl;
+        //std::cout << mapnode.ToXML(false) << std::endl;
+        //std::cout << mapnode.ToJSON(false) << std::endl;
 
-        buffer.clear();
-//        return SocketConnection::Write(guido,&mapnode,&metadata["data"]);
-        return SocketConnection::Write(guido,&mapnode);
+        res += SocketConnection::Write(guido,&mapnode);
     }
 
-    return 0;
+    messages.clear();
+    return res;
 }
 
 

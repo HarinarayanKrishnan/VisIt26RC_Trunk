@@ -261,14 +261,9 @@ void SharedDaemon::handleConnection()
         socket->close();
         return;
     }
-
-    QMessageBox box;
-    box.setWindowTitle(socket->peerAddress().toString());
-    box.setStandardButtons(QMessageBox::NoButton);
-
-    box.setText("A new user is connecting...");
-    QTimer::singleShot(2000,&box,SIGNAL(accepted()));
-    box.show();
+    std::cout << "user: " 
+              << socket->peerAddress().toString().toStdString()
+              << " is attempting to connect" << std::endl;
 
     QAbstractSocket* finalSocket = NULL;
     ConnectionType typeOfConnection = TcpConnection;
@@ -399,16 +394,15 @@ void SharedDaemon::handleConnection()
 
         /// Now that client has launched RemoveCallback..
         subject->AddNewViewerClientConnection(newClient);
-
-        box.setText("Finished connecting new user...");
-        QTimer::singleShot(2000,&box,SIGNAL(accepted()));
-        box.show();
+        std::cout << "user: " 
+                  << socket->peerAddress().toString().toStdString()
+                  << " successfully connected" << std::endl;
     }
     CATCHALL
     {
-        box.setText("User failed to connect...");
-        QTimer::singleShot(2000,&box,SIGNAL(accepted()));
-        box.show();
+        std::cout << "user: " 
+                  << socket->peerAddress().toString().toStdString()
+                  << " failed to connected" << std::endl;
         delete newClient;
     }
     ENDTRY

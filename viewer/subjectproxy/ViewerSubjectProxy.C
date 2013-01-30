@@ -500,15 +500,15 @@ ViewerSubjectProxy::eventFilter(QObject *o, QEvent *e)
             ViewerWindow* vw = ViewerWindowManager::Instance()->GetWindow(id-1);
             if(vw)
             {
-                if (vw->GetRealized() == true)
-                    vw->Show();
-                else
+                if (!vw->GetRealized())
                     vw->Realize();
+                //else
+                //    vw->Show();
             }
             return true;
         }
     }
-    else if(e->type() == QEvent::Hide && !e->spontaneous())
+/*    else if(e->type() == QEvent::Hide && !e->spontaneous())
     {
         QMainWindow* renwin = dynamic_cast<QMainWindow*>(o);
         if(renwin)
@@ -520,5 +520,6 @@ ViewerSubjectProxy::eventFilter(QObject *o, QEvent *e)
             return true;
         }
     }
+*/
     return false;
 }
