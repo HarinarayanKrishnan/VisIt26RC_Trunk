@@ -107,6 +107,7 @@ public:
     Connection  *GetWriteConnection(int i=0) const;
     void         SetVersion(const std::string &ver);
     const std::string &GetLocalUserName();
+    void SetCustomConnectionCallback(Connection* (*callback)(const char* hostname,int port,void*), void *cbdata);
 private:
     void ExchangeTypeRepresentations(int failCode=0);
     int  GetClientSocketDescriptor(int port);
@@ -120,6 +121,9 @@ private:
     std::string      version;
     std::string      securityKey;
     std::string      localUserName;
+    static Connection*     (*customConnectionCallback)(const char* hostname, int port, void*);
+    static void             *customConnectionCallbackData;
+
 };
 
 #endif

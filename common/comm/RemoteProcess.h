@@ -148,7 +148,7 @@ class Connection;
 class COMM_API RemoteProcess
 {
 public:
-    RemoteProcess(const std::string &rProgram);
+    RemoteProcess(const std::string &rProgram, bool skipKey=false);
     virtual ~RemoteProcess();
     virtual bool Open(const MachineProfile &profile,
                       int numRead, int numWrite,
@@ -163,6 +163,8 @@ public:
     int  GetProcessId() const;
     void SetProgressCallback(bool (*)(void *, int), void *);
     std::map<int,int> GetPortTunnelMap() { return portTunnelMap; }
+    void SetListenPort(int portNum) { listenPortNum = portNum; }
+    int GetListenPort() { return listenPortNum; }
 
     static void SetAuthenticationCallback(void (*)(const char *, const char *, int));
     static void SetChangeUserNameCallback(bool (*)(const std::string &,std::string&));
@@ -210,6 +212,7 @@ private:
     bool                   (*progressCallback)(void *, int);
     void                    *progressCallbackData;
     std::map<int,int>        portTunnelMap;
+    bool                     skipSecurityKey;
 
     static void            (*getAuthentication)(const char *, const char *, int);
     static bool            (*changeUsername)(const std::string &, std::string&);

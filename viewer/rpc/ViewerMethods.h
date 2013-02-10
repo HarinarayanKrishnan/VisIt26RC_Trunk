@@ -437,6 +437,7 @@ public:
 
     void DDTConnect(bool connect);
     void DDTFocus(int domain);
+    void AddNewClient(const std::string &clientAddress, const int &port);
 private:
     ViewerState *state;
 };

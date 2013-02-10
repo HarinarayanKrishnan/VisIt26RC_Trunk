@@ -55,8 +55,8 @@
 //
 // ****************************************************************************
 
-ExistingRemoteProcess::ExistingRemoteProcess(const std::string &rProgram) : 
-    RemoteProcess(rProgram)
+ExistingRemoteProcess::ExistingRemoteProcess(const std::string &rProgram, bool skipKey) :
+    RemoteProcess(rProgram,skipKey)
 {
     connectCallback = NULL;
     connectCallbackData = NULL;

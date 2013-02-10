@@ -5450,3 +5450,12 @@ ViewerMethods::DDTFocus(int domain)
     state->GetViewerRPC()->SetIntArg1(domain);
     state->GetViewerRPC()->Notify();
 }
+
+void
+ViewerMethods::AddNewClient(const std::string& clientAddress, const int& port)
+{
+    state->GetViewerRPC()->SetRPCType(ViewerRPC::AddNewClientRPC);
+    state->GetViewerRPC()->SetStringArg1(clientAddress);
+    state->GetViewerRPC()->SetIntArg1(port);
+    state->GetViewerRPC()->Notify();
+}

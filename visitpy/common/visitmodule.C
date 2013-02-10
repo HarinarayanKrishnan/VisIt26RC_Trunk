@@ -1253,7 +1253,7 @@ visit_Launch(PyObject *self, PyObject *args)
     // before we allow more commands to execute.
     CreateListenerThread();
     debug1 << "Launch: 5" << endl;
-    int errorFlag = Synchronize();
+    int errorFlag = 0;//Synchronize();
     debug1 << "Launch: 6" << endl;
 
     //
@@ -14768,6 +14768,43 @@ visit_SetAutoUpdate(PyObject *self, PyObject *args)
 }
 
 // ****************************************************************************
+// Function: visit_AddNewClient
+//
+// Purpose:
+//   Tells VisIt there is a client listening on host, port..
+//
+// Programmer: Brad Whitlock
+// Creation:   Wed Aug 11 16:05:26 PDT 2010
+//
+// Modifications:
+//
+// ****************************************************************************
+
+STATIC PyObject *
+visit_AddNewClient(PyObject *self, PyObject *args)
+{
+    ENSURE_VIEWER_EXISTS();
+
+    const char* host = 0;
+    int port = 0;
+    if (!PyArg_ParseTuple(args, "si", &host, &port))
+    {
+        VisItErrorFunc("AddNewClient requires hostname and port");
+        return NULL;
+    }
+
+    // Set the named selection auto apply mode.
+    MUTEX_LOCK();
+
+    GetViewerMethods()->AddNewClient(host,port);
+
+    MUTEX_UNLOCK();
+
+    // Return the success value.
+    return IntReturnValue(Synchronize());
+}
+
+// ****************************************************************************
 // Function: visit_SetNamedSelectionAutoApply
 //
 // Purpose: 
@@ -16637,6 +16674,8 @@ AddProxyMethods()
               visit_SetNamedSelectionAutoApply_doc);
     AddMethod("SetAutoUpdate", visit_SetAutoUpdate,
               NULL);
+    AddMethod("AddNewClient", visit_AddNewClient,
+              NULL);
     AddMethod("SetOperatorOptions", visit_SetOperatorOptions,
                                                  visit_SetOperatorOptions_doc);
     AddMethod("SetPickAttributes", visit_SetPickAttributes,
@@ -18398,6 +18437,7 @@ Synchronize()
     syncAtts->SetSyncTag(-1);
 
 #ifndef POLLING_SYNCHRONIZE
+    std::cout << "waiting" << std::endl;
     SYNC_COND_WAIT();
 #else
     MUTEX_UNLOCK();
@@ -18407,6 +18447,7 @@ Synchronize()
     }
 #endif
 
+    std::cout << "end.." << std::endl;
     // Enable logging.
     if(logEnabled)
         LogFile_SetEnabled(true);

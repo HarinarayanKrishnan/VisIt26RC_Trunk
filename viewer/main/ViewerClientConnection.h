@@ -112,7 +112,7 @@ public:
 signals:
     void DisconnectClient(ViewerClientConnection *);
     void InputFromClient(ViewerClientConnection *, AttributeSubject *);
-private slots:
+public slots:
     void ReadFromClientAndProcess(int);
     void sendInitialState();
 private:

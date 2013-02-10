@@ -716,6 +716,8 @@ private:
 
     void DDTFocus();
     void DDTConnect();
+
+    void AddNewClient();
         
 signals:
     void scheduleHeavyInitialization();
@@ -767,7 +769,6 @@ private slots:
 private:
     typedef std::vector<ViewerClientConnection *> ViewerClientConnectionVector;
     static void BroadcastToAllClients(void *, Subject *);
-
     QSocketNotifier       *checkParent;
     QTimer                *keepAliveTimer;
     bool                   launchingComponent;

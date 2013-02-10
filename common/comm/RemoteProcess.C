@@ -186,7 +186,7 @@ catch_dead_child(int sig)
 //
 // ****************************************************************************
 
-RemoteProcess::RemoteProcess(const std::string &rProgram) : localHost("notset"),
+RemoteProcess::RemoteProcess(const std::string &rProgram, bool skipKey) : localHost("notset"),
     localUserName(), securityKey(), remoteProgram(rProgram), argList()
 {
     remoteProgramPid = -1;
@@ -201,6 +201,8 @@ RemoteProcess::RemoteProcess(const std::string &rProgram) : localHost("notset"),
     // Set the callback information.
     progressCallback = 0;
     progressCallbackData = 0;
+    listenPortNum = -1;
+    skipSecurityKey = skipKey;
 }
 
 // ****************************************************************************
@@ -524,13 +526,20 @@ RemoteProcess::GetSocketAndPort()
     //
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = htonl(INADDR_ANY);
-    listenPortNum = INITIAL_PORT_NUMBER;
-    const char *visitPort = getenv("VISIT_INITIAL_PORT");
-    if(visitPort != NULL)
+    bool customPort = false;
+
+    if(listenPortNum != -1)
+        customPort = true;
+    else
     {
-        listenPortNum = atoi(visitPort);
-        if(listenPortNum < 1024)
-            listenPortNum = 1024;
+        listenPortNum = INITIAL_PORT_NUMBER;
+        const char *visitPort = getenv("VISIT_INITIAL_PORT");
+        if(visitPort != NULL)
+        {
+            listenPortNum = atoi(visitPort);
+            if(listenPortNum < 1024)
+                listenPortNum = 1024;
+        }
     }
     debug5 << mName << "Looking for available port starting with: "
            << listenPortNum << endl;
@@ -542,7 +551,8 @@ RemoteProcess::GetSocketAndPort()
 #endif
         if (bind(listenSocketNum, (struct sockaddr *)&sin, sizeof(sin)) < 0)
         {
-            listenPortNum++;
+            if(customPort) break; ///user requested ports should fail immediately upon
+            listenPortNum++;      ///unsuccessful completion..
 #if defined(_WIN32)
             LogWindowsSocketError(mName, "bind");
 #endif
@@ -1402,8 +1412,14 @@ RemoteProcess::StartMakingConnection(const std::string &remoteHost, int numRead,
     //
     // Create a security key
     //
-    securityKey = CommunicationHeader::CreateRandomKey();
-
+    // HK: Key should only be skipped if the client is manually getting added
+    if(!skipSecurityKey)
+        securityKey = CommunicationHeader::CreateRandomKey();
+    else
+    {
+        for(int i = 0; i < 20; ++i)
+            securityKey += "0";
+    }
     //
     // Open the socket for listening
     //
@@ -2133,6 +2149,7 @@ RemoteProcess::CreateCommandLine(stringVector &args, const MachineProfile &profi
     //
     args.push_back("-key");
     args.push_back(securityKey);
+
 }
 
 // ****************************************************************************

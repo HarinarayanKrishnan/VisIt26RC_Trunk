@@ -74,8 +74,8 @@
 #include <SysCall.h>
 #endif
 
-
-
+#include <QUuid>
+#include <QHostAddress>
 
 enum EOpcode
 {
@@ -847,6 +847,44 @@ QWsSocket::initializeWebSocket(const QString &request, QString &response)
 //   Initialized the zeroesRead member.
 //
 // ****************************************************************************
+WebSocketConnection::WebSocketConnection(QTcpSocket* tcpSocket) : SocketConnection(tcpSocket->socketDescriptor())
+{
+    QString response = "";
+
+    QString resource = "/";
+
+    response += QString("GET %1 HTTP/1.1\r\n").arg(resource);
+
+    response += "Upgrade: websocket\r\n";
+    response += "Connection: Upgrade\r\n";
+
+    QString hostport = QString("%1:%2").arg(
+                tcpSocket->peerName(),
+                tcpSocket->peerPort());
+
+    response += QString("Host: %1\r\n").arg(hostport);
+    response += QString("Origin: %1\r\n").arg(hostport);
+
+    QString key = QString(QUuid::createUuid().toByteArray().toBase64()).trimmed();
+    QString version = QString("%1").arg(13);
+
+    response += QString("Sec-WebSocket-Key: %s\r\n").arg(key);
+    response += QString("Sec-WebSocket-Version: %s\r\n").arg(version);
+
+    response += "\r\n";
+    response += "\r\n";
+
+    tcpSocket->write(response.toAscii());
+    tcpSocket->flush();
+    /// end handshake
+
+    socket = new QWsSocket( tcpSocket );
+
+    QObject::connect(socket,SIGNAL(frameReceived(QByteArray)),this, SLOT(ReadFrame(QByteArray)));
+    QObject::connect(socket,SIGNAL(frameReceived(QString)),this, SLOT(ReadFrame(QString)));
+    QObject::connect(socket,SIGNAL(aboutToClose()),this, SLOT(closeConnection()));
+}
+
 
 WebSocketConnection::WebSocketConnection(QTcpSocket* tcpSocket,const QString& request) : SocketConnection(tcpSocket->socketDescriptor()) //DESCRIPTOR descriptor_) : SocketConnection(descriptor_) /*: buffer()*/
 {

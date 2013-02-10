@@ -59,6 +59,10 @@
 #include <CouldNotConnectException.h>
 #include <IncompatibleVersionException.h>
 
+Connection* (*ParentProcess::customConnectionCallback)(const char*,int,void*) = NULL;
+void* ParentProcess::customConnectionCallbackData = NULL;
+
+
 // ****************************************************************************
 // Method: ParentProcess::ParentProcess
 //
@@ -376,11 +380,19 @@ ParentProcess::Connect(int numRead, int numWrite, int *argc, char **argv[],
             writeConnections = new Connection*[numRead];
             for(int j = 0; j < numRead; ++j)
             {
-                int desc = GetClientSocketDescriptor(port);
-                if(desc != -1)
+                if(customConnectionCallback)
                 {
-                    writeConnections[nWriteConnections] = new SocketConnection(desc);
+                    writeConnections[nWriteConnections] = (*customConnectionCallback)(hostName.c_str(), port,customConnectionCallbackData);
                     ++nWriteConnections;
+                }
+                else
+                {
+                    int desc = GetClientSocketDescriptor(port);
+                    if(desc != -1)
+                    {
+                        writeConnections[nWriteConnections] = new SocketConnection(desc);
+                        ++nWriteConnections;
+                    }
                 }
             }
         }
@@ -392,11 +404,19 @@ ParentProcess::Connect(int numRead, int numWrite, int *argc, char **argv[],
             readConnections = new Connection*[numWrite];
             for(int j = 0; j < numWrite; ++j)
             {
-                int desc = GetClientSocketDescriptor(port);
-                if(desc != -1)
+                if(customConnectionCallback)
                 {
-                    readConnections[nReadConnections] = new SocketConnection(desc);
-                    ++nReadConnections;
+                    readConnections[nReadConnections] = (*customConnectionCallback)(hostName.c_str(), port, customConnectionCallbackData);
+                    ++nWriteConnections;
+                }
+                else
+                {
+                    int desc = GetClientSocketDescriptor(port);
+                    if(desc != -1)
+                    {
+                        readConnections[nReadConnections] = new SocketConnection(desc);
+                        ++nReadConnections;
+                    }
                 }
             }
         }
@@ -892,4 +912,11 @@ ParentProcess::GetLocalUserName()
     }
 
     return localUserName;
+}
+
+void
+ParentProcess::SetCustomConnectionCallback(Connection *(*callback)(const char *, int, void *), void *cbdata)
+{
+    customConnectionCallback = callback;
+    customConnectionCallbackData = cbdata;
 }

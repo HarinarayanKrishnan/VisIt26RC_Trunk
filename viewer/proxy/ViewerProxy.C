@@ -55,6 +55,7 @@
 #include <PlotInfoAttributes.h>
 #include <PluginManagerAttributes.h>
 #include <RemoteProcess.h>
+#include <ExistingRemoteProcess.h>
 #include <SILRestrictionAttributes.h>
 #include <SocketConnection.h>
 #include <ViewerMethods.h>
@@ -402,6 +403,7 @@ ViewerProxy::GetLocalUserName() const
 void
 ViewerProxy::ProcessInput()
 {
+    std::cout << "Processing input" << std::endl;
     //
     // Try and read from the viewer.
     //
@@ -608,6 +610,8 @@ ViewerProxy::Create(const char *visitProgram, int *inputArgc, char ***inputArgv)
     int add_viewer_port = -1;
     std::string add_viewer_password = "";
 
+    bool startListener = false;
+    int addListenerPort = 0;
 
     if(inputArgc != 0 && inputArgv != 0)
     {
@@ -640,6 +644,12 @@ ViewerProxy::Create(const char *visitProgram, int *inputArgc, char ***inputArgv)
                 haveViewPassword = true;
                 ++i;
             }
+            else if(strcmp(arg[i], "-client_listener") == 0)
+            {
+                addListenerPort = atoi(arg[i+1]);
+                startListener = true;
+                ++i;
+            }
         }
     }
     bool addNewClientToViewer = haveViewHost &&
@@ -649,8 +659,9 @@ ViewerProxy::Create(const char *visitProgram, int *inputArgc, char ***inputArgv)
 
     if(!reverseLaunch)
     {
-        if(!addNewClientToViewer)
+        if(!addNewClientToViewer && !startListener)
         {
+
             //
             // Create the viewer process.  The viewer is executed using
             // "visit -viewer".
@@ -672,6 +683,23 @@ ViewerProxy::Create(const char *visitProgram, int *inputArgc, char ***inputArgv)
             // Use viewer's connections for xfer.
             xfer->SetInputConnection(viewer->GetWriteConnection());
             xfer->SetOutputConnection(viewer->GetReadConnection());
+        }
+        else if(startListener)
+        {
+            std::cout << "listener activated: " << addListenerPort << std::endl;
+            viewer = new ExistingRemoteProcess(std::string(visitProgram),true);
+            //viewer->AddArgument(std::string("-viewer"));
+
+            //for (size_t i = 0; i < argv.size(); ++i)
+            //    viewer->AddArgument(argv[i]);
+
+            viewer->SetListenPort(addListenerPort);
+            viewer->Open(MachineProfile::Default(), 1, 1);
+
+            // Use viewer's connections for xfer.
+            xfer->SetInputConnection(viewer->GetWriteConnection());
+            xfer->SetOutputConnection(viewer->GetReadConnection());
+            std::cout << "connection established" << std::endl;
         }
         else
         {

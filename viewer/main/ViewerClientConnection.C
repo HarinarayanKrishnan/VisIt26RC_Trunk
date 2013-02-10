@@ -355,17 +355,27 @@ ViewerClientConnection::LaunchClient(const std::string &program,
 void
 ViewerClientConnection::sendInitialState()
 {
-    // Send one state object.
-    viewerState->GetStateObject(initialStateStage)->SelectAll();
-    SetUpdate(false);
-    if(allState) viewerState->GetStateObject(initialStateStage)->SetSendMetaInformation(true);
-    viewerState->GetStateObject(initialStateStage)->Notify();
-    if(allState) viewerState->GetStateObject(initialStateStage)->SetSendMetaInformation(false);
+    ///TODO: remove this logic and replace with original..
+    for(int i = allState ? 0 : viewerState->FreelyExchangedState();
+        i < viewerState->GetNumStateObjects(); ++i)
+    {
+        viewerState->GetStateObject(i)->SelectAll();
+        SetUpdate(false);
+        if(allState) viewerState->GetStateObject(i)->SetSendMetaInformation(true);
+        viewerState->GetStateObject(i)->Notify();
+        if(allState) viewerState->GetStateObject(i)->SetSendMetaInformation(false);
+    }
+//    // Send one state object.
+//    viewerState->GetStateObject(initialStateStage)->SelectAll();
+//    SetUpdate(false);
+//    if(allState) viewerState->GetStateObject(initialStateStage)->SetSendMetaInformation(true);
+//    viewerState->GetStateObject(initialStateStage)->Notify();
+//    if(allState) viewerState->GetStateObject(initialStateStage)->SetSendMetaInformation(false);
 
-    // See if we should send another state object in a deferred manner.
-    initialStateStage++;
-    if(initialStateStage < viewerState->GetNumStateObjects())
-        QTimer::singleShot(50, this, SLOT(sendInitialState()));
+//    // See if we should send another state object in a deferred manner.
+//    initialStateStage++;
+//    if(initialStateStage < viewerState->GetNumStateObjects())
+//        QTimer::singleShot(50, this, SLOT(sendInitialState()));
 }
 
 // ****************************************************************************

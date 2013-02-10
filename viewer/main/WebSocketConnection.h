@@ -158,6 +158,7 @@ class VIEWER_API WebSocketConnection : public QObject, public SocketConnection
     Q_OBJECT
 public:
     //WebSocketConnection(DESCRIPTOR descriptor_);
+    WebSocketConnection(QTcpSocket* socket);
     WebSocketConnection(QTcpSocket* socket,const QString& response);
     virtual ~WebSocketConnection();
 

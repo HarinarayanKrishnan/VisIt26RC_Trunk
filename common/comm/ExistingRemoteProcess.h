@@ -83,7 +83,7 @@
 class COMM_API ExistingRemoteProcess : public RemoteProcess
 {
 public:
-    ExistingRemoteProcess(const std::string &rProgram);
+    ExistingRemoteProcess(const std::string &rProgram, bool skipKey = false);
     virtual ~ExistingRemoteProcess();
     virtual bool Open(const MachineProfile &profile,
                       int numRead, int numWrite,

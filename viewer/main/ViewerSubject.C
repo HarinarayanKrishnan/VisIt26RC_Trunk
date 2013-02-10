@@ -8559,6 +8559,9 @@ ViewerSubject::HandleViewerRPCEx()
     case ViewerRPC::DDTFocusRPC:
         DDTFocus();
         break;
+    case ViewerRPC::AddNewClientRPC:
+        AddNewClient();
+        break;
     case ViewerRPC::MaxRPC:
         break;
     default:
@@ -11557,4 +11560,81 @@ void ViewerSubject::DDTFocus()
         ddt->setFocusOnDomain(domain);
     else
         Error(tr("Cannot focus DDT on domain %0: failed to connect to DDT").arg(domain));
+}
+
+
+// ****************************************************************************
+// Method:  DDTFocus
+//
+// Purpose:
+//   Instructs DDT to focus on a specific domain
+//
+// Programmer:  Jonathan Byrd
+// Creation:    December 18, 2011
+//
+// ****************************************************************************
+
+#include <QTcpSocket>
+#include <WebSocketConnection.h>
+static Connection* AddParentConnection(const char* hostname, int port, void* data)
+{
+    std::cout << "connecting to " << hostname << " " << port << std::endl;
+    QTcpSocket* socket = new QTcpSocket();
+    socket->connectToHost(hostname,port);
+    //return new WebSocketConnection(socket);
+    std::cout << socket->socketDescriptor() << std::endl;
+    return new SocketConnection(socket->socketDescriptor());
+}
+
+void
+ViewerSubject::AddNewClient()
+{
+    const std::string h = GetViewerState()->GetViewerRPC()->GetStringArg1();
+    const int p = GetViewerState()->GetViewerRPC()->GetIntArg1();
+    /// attempt to connect to host from viewer..
+
+    std::cout << "Got: " << h << " " << p << std::endl;
+    char host[1024];
+    char port[1024];
+    char key[1024];
+    std::string securityKey = "";
+
+    for(int i = 0; i < 20; ++i)
+        securityKey += "0";
+
+    const char* hostconv = "%s";
+    const char* portconv = "%d";
+
+    sprintf(host,hostconv,h.c_str());
+    sprintf(port,portconv,p);
+    sprintf(key,"%s",securityKey.c_str());
+    int argc = 7;
+
+    char **argv = new char*[argc];
+
+    argv[0] = "client";
+    argv[1] = "-host";
+    argv[2] = host;
+    argv[3] = "-port";
+    argv[4] = port;
+    argv[5] = "-key";
+    argv[6] = key;
+
+    for(int i = 0; i < argc; ++i)
+        std::cout << argv[i] << std::endl;
+
+    ParentProcess* parent = new ParentProcess();
+
+    //parent->SetCustomConnectionCallback(AddParentConnection, this);
+    parent->Connect(1,1,&argc,&argv,true);
+    //parent->SetCustomConnectionCallback(NULL, NULL);
+
+
+    int desc = parent->GetWriteConnection()->GetDescriptor();
+    QSocketNotifier* notifier = new QSocketNotifier(desc, QSocketNotifier::Read, 0);
+
+    ViewerClientConnection* newClient = new ViewerClientConnection(parent, notifier, GetViewerState(),
+                                                                   this, "client", false);
+    newClient->sendInitialState();
+    AddNewViewerClientConnection(newClient);
 }
