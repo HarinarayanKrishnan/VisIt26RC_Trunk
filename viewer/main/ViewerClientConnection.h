@@ -108,11 +108,12 @@ public:
     AdvancedRendering GetAdvancedRendering() { return advancedRendering; }
     void SetExternalClient(bool ex) { externalClient = ex; }
     bool GetExternalClient() { return externalClient; }
+    void SendEntireState();
     static const int FreelyExchangedState;
 signals:
     void DisconnectClient(ViewerClientConnection *);
     void InputFromClient(ViewerClientConnection *, AttributeSubject *);
-public slots:
+private slots:
     void ReadFromClientAndProcess(int);
     void sendInitialState();
 private:

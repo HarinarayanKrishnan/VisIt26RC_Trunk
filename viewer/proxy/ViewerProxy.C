@@ -403,7 +403,6 @@ ViewerProxy::GetLocalUserName() const
 void
 ViewerProxy::ProcessInput()
 {
-    std::cout << "Processing input" << std::endl;
     //
     // Try and read from the viewer.
     //

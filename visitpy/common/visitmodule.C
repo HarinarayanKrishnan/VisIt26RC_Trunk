@@ -18437,7 +18437,6 @@ Synchronize()
     syncAtts->SetSyncTag(-1);
 
 #ifndef POLLING_SYNCHRONIZE
-    std::cout << "waiting" << std::endl;
     SYNC_COND_WAIT();
 #else
     MUTEX_UNLOCK();
@@ -18447,7 +18446,6 @@ Synchronize()
     }
 #endif
 
-    std::cout << "end.." << std::endl;
     // Enable logging.
     if(logEnabled)
         LogFile_SetEnabled(true);

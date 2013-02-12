@@ -407,7 +407,7 @@ ParentProcess::Connect(int numRead, int numWrite, int *argc, char **argv[],
                 if(customConnectionCallback)
                 {
                     readConnections[nReadConnections] = (*customConnectionCallback)(hostName.c_str(), port, customConnectionCallbackData);
-                    ++nWriteConnections;
+                    ++nReadConnections;
                 }
                 else
                 {

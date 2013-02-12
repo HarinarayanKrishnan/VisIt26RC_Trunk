@@ -11620,8 +11620,8 @@ ViewerSubject::AddNewClient()
     argv[5] = "-key";
     argv[6] = key;
 
-    for(int i = 0; i < argc; ++i)
-        std::cout << argv[i] << std::endl;
+    //for(int i = 0; i < argc; ++i)
+    //    std::cout << argv[i] << std::endl;
 
     ParentProcess* parent = new ParentProcess();
 
@@ -11630,11 +11630,18 @@ ViewerSubject::AddNewClient()
     //parent->SetCustomConnectionCallback(NULL, NULL);
 
 
-    int desc = parent->GetWriteConnection()->GetDescriptor();
-    QSocketNotifier* notifier = new QSocketNotifier(desc, QSocketNotifier::Read, 0);
+    if(parent->GetWriteConnection())
+    {
+        int desc = parent->GetWriteConnection()->GetDescriptor();
 
-    ViewerClientConnection* newClient = new ViewerClientConnection(parent, notifier, GetViewerState(),
+        if(desc >= 0)
+        {
+            QSocketNotifier* notifier = new QSocketNotifier(desc, QSocketNotifier::Read, 0);
+
+            ViewerClientConnection* newClient = new ViewerClientConnection(parent, notifier, GetViewerState(),
                                                                    this, "client", false);
-    newClient->sendInitialState();
-    AddNewViewerClientConnection(newClient);
+            newClient->SendEntireState();
+            AddNewViewerClientConnection(newClient);
+        }
+    }
 }
