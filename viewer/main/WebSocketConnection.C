@@ -75,7 +75,15 @@
 #endif
 
 
-
+void replace(std::string& str, const std::string& oldStr, const std::string& newStr)
+{
+  size_t pos = 0;
+  while((pos = str.find(oldStr, pos)) != std::string::npos)
+  {
+     str.replace(pos, oldStr.length(), newStr);
+     pos += newStr.length();
+  }
+}
 
 enum EOpcode
 {
@@ -1050,7 +1058,15 @@ WebSocketConnection::Fill()
         messageRead = "";
 
         JSONNode node;
+        try{
         node.Parse(message);
+        }
+        catch(...)
+        {
+            std::cerr << "Exception caught while parsing JSON object" << std::endl;
+            std::cerr << "message: " << message << std::endl;
+            continue;
+        }
 
         int guido = node["id"].GetInt();
         JSONNode contents = node["contents"];
@@ -1107,40 +1123,48 @@ WebSocketConnection::Flush(AttributeSubject *subject)
     //if not connected then sending a message would be useless
     if(socket->state() != QAbstractSocket::ConnectedState) return;
     /// write meta object..
-    if(subject->GetSendMetaInformation())
-    {
-        MapNode meta;
+    try{
+        if(subject->GetSendMetaInformation())
+        {
+            MapNode meta;
+            JSONNode node;
+
+            subject->WriteMeta(meta);
+
+            node["id"] = subject->GetGuido();
+            node["typename"] = subject->TypeName();
+            node["api"] = meta.ToJSONNode(false,false);
+
+            std::string output = node.ToString();
+
+            QString qoutput = output.c_str();
+            socket->write(qoutput);
+
+            if(socket->internalSocket()->state() != QAbstractSocket::UnconnectedState)
+                socket->internalSocket()->waitForBytesWritten();
+        }
+
+        MapNode child;
         JSONNode node;
 
-        subject->WriteMeta(meta);
+        subject->Write(child);
 
         node["id"] = subject->GetGuido();
         node["typename"] = subject->TypeName();
-        node["api"] = meta.ToJSONNode(false,false);
+        node["contents"] = child.ToJSONNode(false,true);
 
-        QString output = node.ToString().c_str();
+        std::string output = node.ToString();
 
-        socket->write(output);
+        QString qoutput = output.c_str();
+        socket->write(qoutput);
 
         if(socket->internalSocket()->state() != QAbstractSocket::UnconnectedState)
             socket->internalSocket()->waitForBytesWritten();
     }
-
-    MapNode child;
-    JSONNode node;
-
-    subject->Write(child);
-
-    node["id"] = subject->GetGuido();
-    node["typename"] = subject->TypeName();
-    node["contents"] = child.ToJSONNode(false,true);
-
-    QString output = node.ToString().c_str();
-
-    socket->write(output);
-
-    if(socket->internalSocket()->state() != QAbstractSocket::UnconnectedState)
-        socket->internalSocket()->waitForBytesWritten();
+    catch(...)
+    {
+        std::cerr << "Exception occurred in Write out.." << subject->TypeName() << std::endl;
+    }
     buffer.clear();
 }
 

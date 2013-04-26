@@ -231,7 +231,7 @@ SharedDaemon::ParseInput(const QString& input, JSONNode& output)
     {
         JSONNode node;
         node.Parse(input.toStdString());
-
+        std::cout << node.ToString() << std::endl;
         /// also check to make sure password is coorect..
         if(node.GetType() != JSONNode::JSONOBJECT ||
            !node.HasKey("password") ||
@@ -352,30 +352,69 @@ void SharedDaemon::handleConnection()
                                    clientName.c_str(),
                                    true);
 
+    ViewerClientConnection::ViewerClientAttributes& clientAtts = newClient->GetViewerClientAttributes();
     JSONNode::JSONObject jo = output.GetJsonObject();
 
-    newClient->SetExternalClient(true);
+    clientAtts.externalClient = true;
+
+    if(jo.count("name") == 0 || jo["name"].GetString().size() == 0)
+        clientAtts.name = socket->peerAddress().toString().toStdString();
+    else
+        clientAtts.name = jo["name"].GetString();
+
+    if(jo.count("windowIds") > 0 && jo["windowIds"].GetType() == JSONNode::JSONARRAY)
+    {
+        const JSONNode::JSONArray& array = jo["windowIds"].GetArray();
+
+        for(int i = 0; i < array.size(); ++i)
+        {
+            const JSONNode& node = array[i];
+
+            if(node.GetType() != JSONNode::JSONINTEGER)
+                continue;
+
+            std::cout << clientAtts.name <<  " requesting window: " << node.GetInt() << " " << std::endl;
+            clientAtts.windowIds.push_back(node.GetInt());
+        }
+    }
+
+    if(jo.count("geometry") > 0)
+    {
+        std::string geometry = jo["geometry"].GetString();
+
+        /// split into width & height...
+        size_t index = geometry.find("x");
+        if(index != std::string::npos && index != 0 && index != geometry.size()-1)
+        {
+            int geometryWidth = atoi(geometry.substr(0,index).c_str());
+            int geometryHeight = atoi(geometry.substr(index+1).c_str());
+
+            clientAtts.clientWidth = geometryWidth;
+            clientAtts.clientHeight = geometryHeight;
+            //std::cout << "geometry: " << clientAtts.clientWidth << " " << clientAtts.clientHeight << std::endl;
+        }
+    }
 
     /// advanced rendering can be true or false (image only), or string none,image,data
     if(jo.count("canRender") == 0)
-        newClient->SetAdvancedRendering(ViewerClientConnection::AR_None);
+        clientAtts.renderingType = ViewerClientConnection::AR_None;
     else
     {
         const JSONNode& node = jo["canRender"];
 
         /// TODO: remove the boolean check and make all current clients comply..
         if(node.GetType() == JSONNode::JSONBOOL)
-            newClient->SetAdvancedRendering(node.GetBool() ? ViewerClientConnection::AR_Image :
-                                                             ViewerClientConnection::AR_None);
+            clientAtts.renderingType = node.GetBool() ? ViewerClientConnection::AR_Image :
+                                                        ViewerClientConnection::AR_None;
         else if(node.GetType() == JSONNode::JSONSTRING)
         {
-            if(node.GetString() == "image") newClient->SetAdvancedRendering(ViewerClientConnection::AR_Image);
-            else if(node.GetString() == "data") newClient->SetAdvancedRendering(ViewerClientConnection::AR_Data);
-            else newClient->SetAdvancedRendering(ViewerClientConnection::AR_None);
+            if(node.GetString() == "image") clientAtts.renderingType = ViewerClientConnection::AR_Image;
+            else if(node.GetString() == "data") clientAtts.renderingType = ViewerClientConnection::AR_Data;
+            else clientAtts.renderingType = ViewerClientConnection::AR_None;
         }
         else
         {
-            newClient->SetAdvancedRendering(ViewerClientConnection::AR_None);
+            clientAtts.renderingType = ViewerClientConnection::AR_None;
         }
     }
     stringVector args;

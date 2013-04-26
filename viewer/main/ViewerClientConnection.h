@@ -83,6 +83,25 @@ class ViewerClientConnection : public ViewerBase, public SimpleObserver
 {
     Q_OBJECT
 public:
+    enum AdvancedRendering { AR_None, AR_Image, AR_Data};
+
+    struct ViewerClientAttributes
+    {
+        std::string name;
+        bool externalClient;
+        int clientWidth, clientHeight;
+        double resolution;
+        AdvancedRendering renderingType;
+        intVector windowIds;
+        ViewerClientAttributes() {
+            name = "--client--";
+            externalClient = false;
+            clientWidth = clientHeight = -1;
+            renderingType = AR_None;
+            resolution = 80;
+        }
+    };
+
     ViewerClientConnection(const ViewerState *, QObject *parent, const QString &name, const bool _allState = false);
     ViewerClientConnection(ParentProcess *, QSocketNotifier *, const ViewerState *,
                            QObject *parent, const QString &name, const bool _allState = false);
@@ -103,11 +122,8 @@ public:
 
     const QString &Name() const;
 
-    enum AdvancedRendering { AR_None, AR_Image, AR_Data};
-    void SetAdvancedRendering(AdvancedRendering ar) { advancedRendering = ar; }
-    AdvancedRendering GetAdvancedRendering() { return advancedRendering; }
-    void SetExternalClient(bool ex) { externalClient = ex; }
-    bool GetExternalClient() { return externalClient; }
+    void SetViewerClientAttributes(const ViewerClientAttributes& atts) { clientAtts = atts; }
+    ViewerClientAttributes& GetViewerClientAttributes() { return clientAtts; }
     static const int FreelyExchangedState;
 signals:
     void DisconnectClient(ViewerClientConnection *);
@@ -125,10 +141,8 @@ private:
     bool               emitSignalsOnUpdate;
     bool               ownsNotifier;
     bool               allState; //whether to send all the state during initial connection
-    AdvancedRendering  advancedRendering; //this client request has rendering capabilities
-    bool               externalClient; // this client is non standard
     int                initialStateStage;
-
+    ViewerClientAttributes clientAtts;
 };
 
 #endif

@@ -433,10 +433,10 @@ ViewerSubject::AddNewViewerClientConnection(ViewerClientConnection* newClient)
 
     clients.push_back(newClient);
 
-    if(newClient->GetAdvancedRendering() == ViewerClientConnection::AR_Image)
+    if(newClient->GetViewerClientAttributes().renderingType == ViewerClientConnection::AR_Image)
         BroadcastAdvanced(GetViewerState()->GetView3DAttributes());
 
-    if(newClient->GetAdvancedRendering() == ViewerClientConnection::AR_Data)
+    if(newClient->GetViewerClientAttributes().renderingType == ViewerClientConnection::AR_Data)
         BroadcastAdvanced(0);
 
     // Discover the client's information.
@@ -1259,6 +1259,28 @@ ViewerSubject::AddInputToXfer(ViewerClientConnection *client,
                     clients[i]->BroadcastToClient(subj);
             }
         }
+        /// TODO: remove temporary update of messaging system
+        /// and replace with actual messaging system..
+        else
+        {
+            /// for now if the message from client comes in a certain format
+            /// then broadcast to all external clients..
+            if(subj->GetGuido() == GetViewerState()->GetMessageAttributes()->GetGuido())
+            {
+                std::string text = ((MessageAttributes*)subj)->GetText();
+                //std::cout << text << std::endl;
+                if(text.find("Message") != std::string::npos)
+                {
+                    for(int i = 0; i < clients.size(); ++i)
+                    {
+                        if(clients[i] != client)
+                        {
+                            clients[i]->BroadcastToClient(subj);
+                        }
+                    }
+                }
+            }
+        }
 
         // Schedule the input to be processed by the main event loop.
         QTimer::singleShot(10, this, SLOT(ProcessFromParent()));
@@ -1308,6 +1330,8 @@ ViewerSubject::DisconnectClient(ViewerClientConnection *client)
 
         debug1 << "VisIt's viewer lost a connection to one of its clients ("
                << client->Name().toStdString() << ")." << endl;
+        if(client->GetViewerClientAttributes().externalClient)
+            std::cout << "Disconnecting client: " << client->GetViewerClientAttributes().name << std::endl;
         client->deleteLater();
 
         // check to see if all other clients are remote, if they are then quit since
@@ -1315,7 +1339,7 @@ ViewerSubject::DisconnectClient(ViewerClientConnection *client)
         bool adminClient = false;
         for(int i = 0; i < clients.size(); ++i)
         {
-            if(!clients[i]->GetExternalClient())
+            if(!clients[i]->GetViewerClientAttributes().externalClient)
             {
                 adminClient = true;
                 break;
@@ -8601,126 +8625,267 @@ ViewerSubject::BroadcastAdvanced(AttributeSubject* subj)
 
     for(int i = 0; i < clients.size(); ++i)
     {
-        if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_Image)
+        if(clients[i]->GetViewerClientAttributes().renderingType == ViewerClientConnection::AR_Image)
             shouldBroadCastAdvancedImage = true;
-        if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_Data)
+        if(clients[i]->GetViewerClientAttributes().renderingType == ViewerClientConnection::AR_Data)
             shouldBroadCastAdvancedData = true;
     }
 
     if(!shouldBroadCastAdvancedImage && !shouldBroadCastAdvancedData) return;
 
-    /// if DrawPlots then send a Query for Advanced users..
-    stringVector defaultVarsImages;
-    stringVector defaultVarsData;
-    intVector defaultVarsDataMap;
+    /// keeps a copy of each unique requested dimension..
+    std::map<std::string, double> geometryTimerMap;
+    std::map<std::string, stringVector> geometryImageMap;
+    std::map<std::string, stringVector> geometryDataMap;
+    std::map<std::string, intVector> geometryDataSizeMap;
 
-    if(     shouldBroadCastAdvancedImage &&
-            (subj == GetViewerState()->GetView2DAttributes() ||
-            subj == GetViewerState()->GetView3DAttributes()))
+    ViewerWindowManager* manager = ViewerWindowManager::Instance();
+
+    for(int x = 0; x < clients.size(); ++x)
     {
-        ViewerWindowManager* manager = ViewerWindowManager::Instance();
+        const ViewerClientConnection::ViewerClientAttributes& clatts = clients[x]->GetViewerClientAttributes();
 
-        /// for now do screen capture, until all clients are stable
-        for(int i = 0; i < manager->GetNumWindows(); ++i)
+        if(clatts.renderingType == ViewerClientConnection::AR_None)
+            continue;
+
+        intVector activeWindows = clatts.windowIds;
+
+        if(activeWindows.size() == 0)
+            activeWindows.push_back(manager->GetActiveWindow()->GetWindowId()+1);
+
+        if(     clatts.renderingType == ViewerClientConnection::AR_Image &&
+                (subj == GetViewerState()->GetView2DAttributes() ||
+                subj == GetViewerState()->GetView3DAttributes()))
         {
-            ViewerWindow* vwin = manager->GetWindow(i);
 
-            size_t len = 0;
-            const char* result = 0;
-            /// image
-            avtImage_p image = vwin->ScreenCapture();
-            /// convert to format..
-            result = avtImageFileWriter::WriteToByteArray(image->GetImage(),80,1,len);
-
-            if(len > 0){
-                QByteArray data(result,len);
-                defaultVarsImages.push_back(QString(data.toBase64()).toStdString());
-            }
-            delete [] result;
-        }
-    }
-
-    if( shouldBroadCastAdvancedData && subj == NULL )
-    {
-        ViewerWindowManager* manager = ViewerWindowManager::Instance();
-
-        /// for now do screen capture, until all clients are stable
-        for(int i = 0; i < manager->GetNumWindows(); ++i)
-        {
-            ViewerWindow* vwin = manager->GetWindow(i);
-
-            size_t len = 0;
-            const char* result = 0;
-
-            /// get dataset..
-            ViewerPlotList *plotList = vwin->GetPlotList();
-
-            if(plotList->GetNumRealizedPlots() == 0 || plotList->GetNumVisiblePlots() == 0)
-                continue;
-
-            for(int j = 0; j < plotList->GetNumPlots(); ++j)
+            /// for now do screen capture, until all clients are stable
+            for(int i = 0; i < manager->GetNumWindows(); ++i)
             {
-                ViewerPlot* plot = plotList->GetPlot(i);
+                ViewerWindow* vwin = manager->GetWindow(i);
 
-                avtDataObjectReader_p reader = plot->GetReader();
-                if(reader->InputIsImage())
+                bool match = false;
+                for(int j = 0; j < activeWindows.size(); ++j)
                 {
-                    avtImage_p image = reader->GetImageOutput();
-                    result = avtImageFileWriter::WriteToByteArray(image->GetImage(),80,1,len);
-
-                    if(len > 0){
-                        QByteArray data(result,len);
-                        defaultVarsData.push_back(QString(data.toBase64()).toStdString());
-                        defaultVarsDataMap.push_back((int)ViewerClientConnection::AR_Image);
-                    }
-                    /// free the memory
-                    delete [] result;
-                }
-                else if(reader->InputIsDataset())
-                {
-                    avtDataset_p dataset = reader->GetDatasetOutput();
-                    std::string res = dataset->GetDatasetAsString();
-                    if(res.size() > 0)
+                    if(activeWindows[j] == vwin->GetWindowId()+1)
                     {
-                        QByteArray data(res.c_str(),res.size());
-                        defaultVarsData.push_back(QString(data.toBase64()).toStdString());
-                        defaultVarsDataMap.push_back((int)ViewerClientConnection::AR_Data);
+                        match = true;
+                        break;
                     }
                 }
+
+                if(!match) continue;
+
+
+                QString qdim = QString("%1x%2x%3").arg(clatts.clientWidth)
+                                                  .arg(clatts.clientHeight)
+                                                  .arg(vwin->GetWindowId()+1);
+
+                std::string dimensions = qdim.toStdString();
+
+                if(geometryImageMap.count(dimensions) > 0) continue;
+
+                int timerId = visitTimer->StartTimer(true);
+
+                stringVector& defaultVarsImages = geometryImageMap[dimensions];
+
+
+                size_t len = 0;
+                const char* result = 0;
+                /// image
+                avtImage_p image = vwin->ScreenCapture();
+
+                /// convert to format..
+                if(clatts.clientWidth == -1 || clatts.clientHeight == -1)
+                    result = avtImageFileWriter::WriteToByteArray(image->GetImage(),clatts.resolution,1,len);
+                else
+                    result = avtImageFileWriter::WriteToByteArray(image->GetImage(),clatts.resolution,1,
+                                                                  len,clatts.clientWidth, clatts.clientHeight);
+
+                if(len > 0){
+                    QByteArray data(result,len);
+                    defaultVarsImages.push_back(QString(data.toBase64()).toStdString());
+                }
+                delete [] result;
+
+                double timerlen = visitTimer->StopTimer(timerId, "RenderImage",true);
+                geometryTimerMap[dimensions] = timerlen;
+            }
+        }
+
+        if( clatts.renderingType == ViewerClientConnection::AR_Data && subj == NULL)
+        {
+            /// for now do screen capture, until all clients are stable
+            for(int i = 0; i < manager->GetNumWindows(); ++i)
+            {
+                ViewerWindow* vwin = manager->GetWindow(i);
+
+                bool match = false;
+                for(int j = 0; j < activeWindows.size(); ++j)
+                {
+                    if(activeWindows[j] == vwin->GetWindowId()+1)
+                    {
+                        match = true;
+                        break;
+                    }
+                }
+
+                if(!match) continue;
+
+
+                QString qdim = QString("%1x%2x%3").arg(clatts.clientWidth)
+                                                  .arg(clatts.clientHeight)
+                                                  .arg(vwin->GetWindowId()+1);
+                std::string dimensions = qdim.toStdString();
+
+                if(geometryDataMap.count(dimensions) > 0) continue;
+
+                /// get dataset..
+                ViewerPlotList *plotList = vwin->GetPlotList();
+
+                if(plotList->GetNumRealizedPlots() == 0 || plotList->GetNumVisiblePlots() == 0)
+                     continue;
+
+                stringVector& defaultVarsData = geometryDataMap[dimensions];
+                intVector& defaultVarsDataMap = geometryDataSizeMap[dimensions];
+
+                int timerId = visitTimer->StartTimer(true);
+
+
+                size_t len = 0;
+                const char* result = 0;
+
+                for(int j = 0; j < plotList->GetNumPlots(); ++j)
+                {
+                    ViewerPlot* plot = plotList->GetPlot(i);
+
+                    avtDataObjectReader_p reader = plot->GetReader();
+                    if(reader->InputIsImage())
+                    {
+                        avtImage_p image = reader->GetImageOutput();
+                        if(clatts.clientWidth == -1 || clatts.clientHeight == -1)
+                            result = avtImageFileWriter::WriteToByteArray(image->GetImage(),clatts.resolution,1,len);
+                        else
+                            result = avtImageFileWriter::WriteToByteArray(image->GetImage(),clatts.resolution,1,
+                                                                          len,clatts.clientWidth, clatts.clientHeight);
+                        if(len > 0){
+                            QByteArray data(result,len);
+                            defaultVarsData.push_back(QString(data.toBase64()).toStdString());
+                            defaultVarsDataMap.push_back((int)ViewerClientConnection::AR_Image);
+                        }
+                        /// free the memory
+                        delete [] result;
+                    }
+                    else if(reader->InputIsDataset())
+                    {
+                        avtDataset_p dataset = reader->GetDatasetOutput();
+                        std::string res = dataset->GetDatasetAsString();
+
+                        if(res.size() > 0)
+                        {
+                            QByteArray data(res.c_str(),res.size());
+                            defaultVarsData.push_back(QString(data.toBase64()).toStdString());
+                            defaultVarsDataMap.push_back((int)ViewerClientConnection::AR_Data);
+                        }
+                    }
+                }
+
+                double timerlen = visitTimer->StopTimer(timerId, "RenderData",true);
+                geometryTimerMap[dimensions] = timerlen;
             }
         }
     }
+
+    /// if no data to transmit then immediately return..
+    if(geometryImageMap.size() == 0 && geometryDataMap.size() == 0)
+        return;
 
     QueryAttributes* qatts = GetViewerState()->GetQueryAttributes();
 
     for(int i = 0; i < clients.size(); ++i)
     {
-        if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_None)
+        const ViewerClientConnection::ViewerClientAttributes& clatts = clients[i]->GetViewerClientAttributes();
+
+        if(clatts.renderingType == ViewerClientConnection::AR_None)
             continue;
 
-        if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_Data &&
-                defaultVarsData.size() > 0)
+        intVector activeWindows = clatts.windowIds;
+
+        if(activeWindows.size() == 0)
+            activeWindows.push_back(manager->GetActiveWindow()->GetWindowId()+1);
+
+        if(clatts.renderingType == ViewerClientConnection::AR_Data) //&&
         {
-            qatts->SetResultsMessage("AVTData");
-            qatts->SetResultsValue(0);
-            qatts->SetDefaultVars(defaultVarsData);
-            qatts->SetVarTypes(defaultVarsDataMap);
-            clients[i]->BroadcastToClient(qatts);
+            for(size_t j = 0; j < activeWindows.size(); ++j)
+            {
+                QString qdim = QString("%1x%2x%3").arg(clatts.clientWidth)
+                                                                 .arg(clatts.clientHeight)
+                                                                 .arg(activeWindows[j]);
+                std::string dimensions = qdim.toStdString();
+
+                if(geometryDataMap.count(dimensions) == 0 || geometryDataMap[dimensions].size() == 0)
+                    continue;
+
+                stringVector& defaultVarsData = geometryDataMap[dimensions];
+                intVector& defaultVarsDataMap = geometryDataSizeMap[dimensions];
+
+                int timer = visitTimer->StartTimer(true);
+                qatts->SetResultsMessage("AVTData");
+                qatts->SetResultsValue(0);
+                qatts->SetDefaultVars(defaultVarsData);
+                qatts->SetVarTypes(defaultVarsDataMap);
+                clients[i]->BroadcastToClient(qatts);
+                double len = visitTimer->StopTimer(timer, "BroadcastData",true);
+                std::cout << clatts.name << ": " << (geometryTimerMap[dimensions] + len) << std::endl;
+            }
         }
-        else if(clients[i]->GetAdvancedRendering() == ViewerClientConnection::AR_Image &&
-                defaultVarsImages.size() > 0)
+        else if(clatts.renderingType == ViewerClientConnection::AR_Image)
         {
-            qatts->SetResultsMessage("ImageData");
-            qatts->SetResultsValue(0);
-            qatts->SetDefaultVars(defaultVarsImages);
-            clients[i]->BroadcastToClient(qatts);
+            for(size_t j = 0; j < activeWindows.size(); ++j)
+            {
+                QString qdim = QString("%1x%2x%3").arg(clatts.clientWidth)
+                                                  .arg(clatts.clientHeight)
+                                                  .arg(activeWindows[j]);
+                std::string dimensions = qdim.toStdString();
+
+                if(geometryImageMap.count(dimensions) == 0 || geometryImageMap[dimensions].size() == 0)
+                    continue;
+
+                stringVector& defaultVarsImages = geometryImageMap[dimensions];
+                int timer = visitTimer->StartTimer();
+
+                qatts->SetResultsMessage("ImageData");
+                qatts->SetResultsValue(0);
+                qatts->SetDefaultVars(defaultVarsImages);
+                qatts->SetVarTypes(intVector());
+                clients[i]->BroadcastToClient(qatts);
+
+                double len = visitTimer->StopTimer(timer, "BroadcastImage");
+                std::cout << clatts.name << ": " << geometryTimerMap[dimensions] << " " << (geometryTimerMap[dimensions] + len) << std::endl;
+            }
         }
     }
+
+    static bool first = true;
+    static int index = -1;
+    if(!first && (geometryImageMap.size() > 0 || geometryDataMap.size() > 0))
+    {
+        double timeSinceLastCall = visitTimer->StopTimer(index,"BroadcastAdvanceUpdate", true);
+        std::cout << "update: " << timeSinceLastCall << std::endl;
+        index = visitTimer->StartTimer(true);
+    }
+
+    if(first)
+    {
+        index = visitTimer->StartTimer(true);
+        first = false;
+    }
+
 
     /// reset the message..
     qatts->SetResultsMessage("");
     qatts->SetResultsValue(0);
     qatts->SetDefaultVars(stringVector());
+    qatts->SetVarTypes(intVector());
 }
 // ****************************************************************************
 // Method: ViewerSubject::PostponeAction

@@ -41,6 +41,9 @@
 #include <visitstream.h>
 #include <stack>
 #include <cstdlib>
+#include <limits>
+
+#include <VisItException.h>
 
 // ****************************************************************************
 //  Method:  JSONNode::JSONNode
@@ -83,6 +86,7 @@ JSONNode::JSONNode():type(JSONNULLVALUE)
 // ****************************************************************************
 JSONNode::JSONNode(istream &iss):type(JSONNULLVALUE)
 {
+    iss >> std::noskipws; /// don't skip white spaces..
     Parse(iss);
 }
 
@@ -200,13 +204,13 @@ JSONNode::~JSONNode()
 std::string
 JSONNode::ToString(const std::string &indent) const
 {
-    char buf[1024];
-
+    //char buf[1024];
+    std::ostringstream ostr;
     if(type == JSONNULLVALUE)
         return "null";
 
     if(type == JSONBOOL)
-        return json.num.boolValue ? "true" : "false";
+        return GetBool() ? "true" : "false";
 
     if(type == JSONSTRING)
     {
@@ -214,33 +218,30 @@ JSONNode::ToString(const std::string &indent) const
         return str;
     }
 
-    if(type == JSONINTEGER)
-    {
-        sprintf(buf,"%d",(int)json.num.lnumber);
-        return buf;
-    }
-
+//    if(type == JSONINTEGER)
+//    {
+//        ostr << GetInt();
+//        return ostr.str();
+//    }
     if(type == JSONLONG)
     {
-        sprintf(buf,"%ld",json.num.lnumber);
-        return buf;
+        ostr << GetLong();
+        return ostr.str();
     }
-
-    if(type == JSONFLOAT)
-    {
-        sprintf(buf,"%f",(float)json.num.dnumber);
-        return buf;
-    }
-
+//    if(type == JSONFLOAT)
+//    {
+//        ostr << GetFloat();
+//        return ostr.str();
+//    }
     if(type == JSONDOUBLE)
     {
-        sprintf(buf,"%f",json.num.dnumber);
-        return buf;
+        ostr << GetDouble();
+        return ostr.str();
     }
 
     if(type == JSONARRAY)
     {
-        std::string output = "[ ";
+        std::string output = "[";
         for(int i = 0; i < json.array.size(); ++i)
         {
             output += json.array[i].ToString();
@@ -299,6 +300,7 @@ JSONNode::Parse(const std::string &JSON_data)
     if(JSON_data == "")
         return;
     std::istringstream iss;
+    iss >> std::noskipws; /// don't skip white spaces..
     iss.str(JSON_data);
     Parse(iss);
 }
@@ -370,6 +372,7 @@ JSONNode::ParseObject(std::istream &iss)
     if(os != '}')
     {
         std::cout << "JSON ParseObject Failed " << os << std::endl;
+        throw VisItException("JSON ParseObject Failed");
     }
 
     iss >> std::ws;
@@ -387,17 +390,32 @@ JSONNode::ParseKey(std::istream & iss)
     char os;
     iss >> os; /// eat quote..
 
+    iss >> os; /// read first character..
     std::string key = "";
     //read values as long as '"' is not found and if it is
     //found then it cannot be preceded by '\'
-    while(!iss.eof() && ((char)iss.peek()) != '\"' && os != '\\')
-    {
-        iss >> os; /// eat char
-        key += os;
-    }
-    iss >> std::ws;
-    iss >> os; /// eat end quote..
 
+    while(!iss.eof())
+    {
+        if(os == '\\')
+        {
+            key += os; /// store backslash
+            iss >> os;
+
+            key += os; /// consume the backslashed character..
+            iss >> os; /// eat char
+        }
+        else
+        {
+            if(os == '"')
+                break;
+
+            key += os;
+            iss >> os; /// eat char
+        }
+    }
+
+    //std::cout << key << " " << os << " " << std::endl;
     return key;
 }
 
@@ -429,6 +447,7 @@ JSONNode::ParseArray(std::istream &iss)
     if(os != ']')
     {
         std::cout << "JSON ParseArray Failed " << os << std::endl;
+        throw VisItException("JSON ParseObject Failed");
     }
     iss >> std::ws;
     type = JSONARRAY;
@@ -443,7 +462,7 @@ JSONNode::ParseVariant(std::istream &iss)
     iss >> std::ws;
 
     /// if string
-    if(((char)iss.peek()) == '\"')
+    if(((char)iss.peek()) == '"')
     {
         json.str = ParseKey(iss);
         //std::cout << "Got Value: " << json.str << std::endl;
@@ -521,7 +540,21 @@ JSONNode::EscapeString(const std::string &val) const
     for(int i=0;i<ssize;i++)
     {
         if(val[i] == '"')
-        {res += std::string("\\\"");}
+        {res += std::string("");}
+        if(val[i] == '\\')
+        {res += std::string("\\");}
+        //if(val[i] == '/')
+        //{res += std::string("\\/");}
+        else if(val[i] == '\b')
+        {res += std::string("\\b");}
+        else if(val[i] == '\f')
+        {res += std::string("\\f");}
+        else if(val[i] == '\n')
+        {res += std::string("\\n");}
+        else if(val[i] == '\r')
+        {res += std::string("\\r");}
+        else if(val[i] == '\t')
+        {res += std::string("\\t");}
         else
         {res.push_back(val[i]);} 
     }

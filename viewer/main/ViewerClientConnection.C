@@ -49,7 +49,7 @@
 #include <Xfer.h>
 #include <ViewerState.h>
 #include <ViewerRPC.h>
-
+//#include <ViewerWindowManager.h>
 #include <DebugStream.h>
 
 // ****************************************************************************
@@ -97,8 +97,6 @@ ViewerClientConnection::ViewerClientConnection(const ViewerState *s,
     }
     xfer->CreateNewSpecialOpcode(); // animationStopOpcode
     xfer->CreateNewSpecialOpcode(); // iconifyOpcode
-    advancedRendering = AR_None;
-    externalClient = false;
 }
 
 // ****************************************************************************
@@ -159,8 +157,6 @@ ViewerClientConnection::ViewerClientConnection(ParentProcess *p,
     }
     xfer->CreateNewSpecialOpcode(); // animationStopOpcode
     xfer->CreateNewSpecialOpcode(); // iconifyOpcode
-    advancedRendering = AR_None;
-    externalClient = false;
 }
 
 // ****************************************************************************

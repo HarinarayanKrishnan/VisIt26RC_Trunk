@@ -1630,8 +1630,7 @@ avtDataTree::GetDatasetAsString()
     writer->SetInput(dataset);
     writer->Write();
 
-    std::string res = writer->GetOutputString();
-
+    std::string res(writer->GetOutputString(),writer->GetOutputStringLength());
     delete [] ds;
     vaf->Delete();
     vu->Delete();

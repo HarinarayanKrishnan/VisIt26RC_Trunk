@@ -65,16 +65,16 @@ class STATE_API JSONNode
 
     enum JSONType
     {
-        JSONNUMBER,
-        JSONINTEGER,
-        JSONLONG,
-        JSONFLOAT,
-        JSONDOUBLE,
-        JSONSTRING,
-        JSONARRAY,
-        JSONOBJECT,
-        JSONBOOL,
-        JSONNULLVALUE
+        JSONLONG = 0x1,
+        JSONDOUBLE = 0x2,
+        JSONSTRING = 0x4,
+        JSONARRAY = 0x8,
+        JSONOBJECT = 0x10,
+        JSONBOOL = 0x20,
+        JSONNULLVALUE = 0x40,
+        JSONINTEGER = JSONLONG,
+        JSONFLOAT = JSONDOUBLE,
+        JSONNUMBER = JSONLONG | JSONDOUBLE
     };
 
     union number
